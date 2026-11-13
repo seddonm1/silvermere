@@ -21,6 +21,7 @@ use super::equip;
 use super::limited::{self, Holder};
 use crate::commands::{eq_ignore_case, starts_with_ignore_case};
 use crate::cycles::medium::printf_s;
+use crate::movement::ItemHooks;
 use crate::tell::{Noise, TellBlind, tell_room, tell_user};
 use crate::world::World;
 
@@ -277,8 +278,12 @@ fn passes_filter(plr: &Character, itm: &Item, slot: usize, flags: Search) -> boo
     }
 }
 
-/// The ambiguity list sent to the player.
+/// The ambiguity list sent to the player. The heading comes with the first name, so
+/// matches that list no name (hidden items) send nothing.
 pub fn show_options(world: &mut World, id: SessionId, options: &[String]) {
+    if options.is_empty() {
+        return;
+    }
     tell_user(world, id, Msg::Ambiguous);
     for name in options {
         tell_user(world, id, Msg::AmbiguousItem { name: name.clone() });
@@ -346,6 +351,54 @@ pub fn update_encumbrance(world: &mut World, id: SessionId) -> i16 {
     pct
 }
 
+/// Counts the carried weight again from the inventory and the keys and repairs their use
+/// counts (`update_weight_carried`), then stores the encumbrance. A slot whose item is gone
+/// is emptied. The weight is summed unsigned 16-bit, as the game does.
+pub fn update_weight_carried(world: &World, plr: &mut Character) {
+    // the first of these that applies: no valid count on an item with charges (full), a
+    // count on one without (none), more than a new copy (cut back), run down on an item
+    // not kept (one use)
+    fn repair(uses: &mut i16, itm: &Item) {
+        const NO_CHARGES: i16 = -1;
+        if itm.charges != NO_CHARGES && *uses < 0 {
+            *uses = itm.charges;
+        } else if itm.charges == NO_CHARGES && *uses != NO_CHARGES {
+            *uses = NO_CHARGES;
+        } else if *uses > itm.charges {
+            *uses = itm.charges;
+        } else if itm.charges != NO_CHARGES && *uses == 0 && itm.retain == 0 {
+            *uses = 1;
+        }
+    }
+    let mut wgt: u16 = 0;
+    for (slots, uses, empty) in [
+        (&mut plr.items, &mut plr.itemuses, -1),
+        (&mut plr.keys, &mut plr.keyuses, -2),
+    ] {
+        for (i, n) in slots.iter_mut().enumerate() {
+            if n.0 == 0 {
+                continue;
+            }
+            match world.items.get(n) {
+                Some(itm) => {
+                    wgt = wgt.wrapping_add(itm.weight as u16);
+                    if let Some(u) = uses.get_mut(i) {
+                        repair(u, itm);
+                    }
+                }
+                None => {
+                    *n = ItemNo(0);
+                    if let Some(u) = uses.get_mut(i) {
+                        *u = empty;
+                    }
+                }
+            }
+        }
+    }
+    plr.wgt = wgt;
+    plr.encumpct = encumbrance_pct(plr.wgt, plr.coins, max_weight(world, plr));
+}
+
 /// The load the inventory shows: carried weight plus coin weight.
 pub fn load(plr: &Character) -> i64 {
     i64::from(plr.wgt) + i64::from(coin_weight(plr.coins) as u16)
@@ -378,7 +431,8 @@ pub fn add_item_to_inventory(world: &mut World, id: SessionId, item: ItemNo, cha
     let too_heavy = {
         let plr = world.sessions.get(&id).and_then(|s| s.player());
         plr.is_some_and(|plr| {
-            i32::from(itm.weight) + i32::from(plr.wgt) + coin_weight(plr.coins)
+            // the item and the load summed unsigned 16-bit, as the game does
+            i32::from((itm.weight as u16).wrapping_add(plr.wgt)) + coin_weight(plr.coins)
                 > max_weight(world, plr)
         })
     };
@@ -502,6 +556,23 @@ pub fn remove_item_from_record(
     let userid = plr.userid.clone();
     limited::release(world, item, Holder::User(&userid));
     Some(charges)
+}
+
+/// The item hooks: the exits that need an item take a use off it here.
+pub struct ItemCharges;
+
+impl ItemHooks for ItemCharges {
+    fn deduct_item_charge(&self, world: &mut World, id: SessionId, slot: usize) {
+        let Some(plr) = world.session(id).and_then(|s| s.player()) else {
+            return;
+        };
+        let (Some(&item), Some(&uses)) = (plr.items.get(slot), plr.itemuses.get(slot)) else {
+            return;
+        };
+        if world.items.contains_key(&item) {
+            deduct_item_charge(world, id, item, uses);
+        }
+    }
 }
 
 /// What [`deduct_item_charge`] did.

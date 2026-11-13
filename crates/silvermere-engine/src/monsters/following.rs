@@ -5,7 +5,8 @@
 //! (`ActiveMonsters::peek`), leaving the cache as it is.
 //!
 //! The spell rounds of the medium update are T-050's `spells::active::tick_monster_spells`;
-//! the death is T-033's, reached through `CycleHooks::check_kill_monster`.
+//! the death is T-033's, reached through `CycleHooks::check_kill_monster`, and its
+//! experience is shared out with no killer.
 
 use silvermere_rules::spawn::{GIVEUPRNDS, MAXMOVERS, wander_chance};
 use silvermere_text::Msg;
@@ -17,10 +18,14 @@ use silvermere_types::sizes::NTRAIL;
 use super::active::remove_active_monster;
 use super::monster_has_ability;
 use super::move_monster::{
-    Moved, dir_monster_travelling_coord, move_monster, pick_valid_random_direction,
+    Moved, dir_monster_travelling_coord, move_monster, move_monster_nowhere,
+    pick_valid_random_direction,
 };
+use crate::combat::experience_split::distribute_experience;
+use crate::combat::{AutoTarget, kill_autocombat_against_monster};
 use crate::movement::exits::tell_room_all;
 use crate::scheduler::Rng;
+use crate::spells::active::end_enslaving_spells;
 use crate::world::World;
 
 /// The medium cycle's monster body without the spell rounds (T-052): a monster below 0 hit
@@ -35,10 +40,16 @@ pub fn medium_update_monster(world: &mut World, n: ActiveMonsterId) {
     let Some(mon) = world.active_monsters.peek(n).cloned() else {
         return;
     };
-    // dead: the experience goes to nobody (no killer), every fight against it
-    // ends
+    // dead: the experience is shared out with no killer, every fight against it ends
     if mon.hp < 0 && (world.cycles.hooks.check_kill_monster)(world, n) {
-        crate::combat::kill_autocombat_against_monster(world, n);
+        let room = RoomKey {
+            map: mon.map,
+            room: mon.room,
+        };
+        // the record's signed experience goes to an unsigned parameter, as in the game
+        let exp = mon.exp.cast_unsigned();
+        distribute_experience(world, None, exp, AutoTarget::Monster(n), room);
+        kill_autocombat_against_monster(world, n);
         return;
     }
     if mon.following.is_empty() {
@@ -91,11 +102,13 @@ pub fn medium_update_monster(world: &mut World, n: ActiveMonsterId) {
     }
 }
 
-/// A random usable exit, unless it is the one the monster came by last. No usable exit (-1)
-/// never equals a `lastdir` of a real direction, and `move_monster` with no exit does
-/// nothing.
+/// A random usable exit, unless it is the one the monster came by last. With no usable
+/// exit (-1) the monster is moved through no exit, unless `lastdir` is -1 too.
 fn wander(world: &mut World, n: ActiveMonsterId, here: RoomKey, lastdir: i16) {
     let Some(dir) = pick_valid_random_direction(world, here) else {
+        if lastdir != -1 {
+            move_monster_nowhere(world, n);
+        }
         return;
     };
     if lastdir != dir.code() as i16 {
@@ -169,6 +182,11 @@ pub fn fast_update_monster(world: &mut World, n: ActiveMonsterId) {
         }
         None => lost = true,
     }
+    // a lost round and giving up mark the record changed, even when it is back to its
+    // saved values
+    if lost {
+        world.active_monsters.mark_dirty(n);
+    }
     let Some(m) = world.active_monsters.peek_mut(n) else {
         return;
     };
@@ -182,25 +200,9 @@ pub fn fast_update_monster(world: &mut World, n: ActiveMonsterId) {
             m.following.clear();
             if m.flags.contains(ActiveMonsterFlags::CHARMED) {
                 m.flags.remove(ActiveMonsterFlags::CHARMED);
-                // every spell carrying Enslave Creature ends (its end-of-spell effects
-                // are T-052's); a slot whose spell is gone is cleared
-                let spells = m.spells;
-                for (i, s) in spells.iter().enumerate() {
-                    if s.spell.0 == 0 {
-                        continue;
-                    }
-                    let clear = world.spells.get(&s.spell).is_none_or(|spl| {
-                        spl.abilities.iter().any(|(a, _)| *a == Ability::Enslave)
-                    });
-                    if clear && let Some(m) = world.active_monsters.peek_mut(n) {
-                        m.spells[i] = silvermere_types::records::ActiveSpell {
-                            spell: silvermere_types::ids::SpellNo(0),
-                            value: 0,
-                            rounds: 0,
-                        };
-                    }
-                }
+                end_enslaving_spells(world, n);
             }
+            world.active_monsters.mark_dirty(n);
         } else {
             remove_active_monster(world, n, true);
         }

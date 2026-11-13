@@ -10,15 +10,14 @@ use silvermere_types::records::Character;
 
 use super::attack::pvp_level_range_ok;
 use super::{
-    EvilKind, add_evil_points, debug_on, item_has, object_pronoun, player, player_mut, room_of,
-    subject_pronoun,
+    EvilKind, add_evil_points, debug_on, item_has, monster, object_pronoun, player, player_mut,
+    room_of, subject_pronoun,
 };
 use crate::commands::combat::{Found, find_action_target};
 use crate::commands::dispatch::Handled;
 use crate::commands::pending::add_delay;
 use crate::commands::{Cmd, CommandLine};
 use crate::items::inventory::{add_item_to_inventory, remove_item_from_inventory, show_options};
-use crate::output::clear_output;
 use crate::tell::tell_user;
 use crate::world::World;
 
@@ -36,11 +35,7 @@ pub fn cmd_rob(world: &mut World, id: SessionId, _cmd: Cmd, line: &CommandLine) 
         tell_user(world, id, Msg::RobSyntax);
         return Handled::Done;
     }
-    let found = find_action_target(world, id, line.rest_from(1), true);
-    // the pending output is cleared unless the name was ambiguous
-    if !matches!(found, Found::Multiple(_)) {
-        clear_output(world, id);
-    }
+    let found = find_action_target(world, id, line.rest_from(1), false);
     match found {
         Found::Multiple(options) => show_options(world, id, &options),
         Found::User(target) => {
@@ -289,14 +284,16 @@ pub fn rob_user(world: &mut World, id: SessionId, target: SessionId, what: Optio
     fail(world);
 }
 
-/// Robbing a monster, which the game does not offer. Only a character forced lawful
-/// who named something is told his way of life prevents it; ROB names nothing, so it does
+/// Robbing a monster, which the game does not offer. The monster is looked up; only when it
+/// exists is a character forced lawful who named something is told his way of life prevents it; ROB names nothing, so it does
 /// nothing at all.
-pub fn rob_monster(world: &mut World, id: SessionId, _monnum: ActiveMonsterId, what: Option<&str>) {
+pub fn rob_monster(world: &mut World, id: SessionId, monnum: ActiveMonsterId, what: Option<&str>) {
+    // the monster is looked up (a cache look-up) even though nothing is done to it
+    let found = monster(world, monnum).is_some();
     let Some(plr) = player(world, id) else {
         return;
     };
-    if what.is_some() && plr.lawful == LAWFUL_FORCED && world.config.enable_lawful {
+    if found && what.is_some() && plr.lawful == LAWFUL_FORCED && world.config.enable_lawful {
         tell_user(world, id, Msg::RobWayOfLife);
     }
 }

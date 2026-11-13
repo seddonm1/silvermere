@@ -29,6 +29,7 @@ use super::{
     attack_user_user, monster, monster_mut, player, player_mut, room_of,
 };
 use crate::items::inventory::matches_any_word;
+use crate::spells::active::end_enslaving_spells;
 use crate::tell::{Noise, TellBlind, tell_room, tell_user};
 use crate::world::World;
 
@@ -425,6 +426,7 @@ pub fn restart_autocombat(world: &mut World, id: SessionId, spell: bool) -> bool
             atkmove = Move::Attack;
         }
     }
+    world.atkmove = atkmove;
     match e.target {
         Some(AutoTarget::Player(t)) => {
             if !world.is_in_game(t) {
@@ -508,6 +510,7 @@ pub fn do_autocombat_for_user(world: &mut World, id: SessionId) -> bool {
     }
     // the stored move, every round
     let e = world.autocombat.entry(id);
+    world.atkmove = e.mv;
     match e.target {
         Some(AutoTarget::Player(t)) => {
             if !world.is_in_game(t) {
@@ -568,38 +571,17 @@ pub fn do_backstab_autocombat(world: &mut World) {
 
 /// For T-036's monster round: a monster charmed by `master` (who is in auto-combat) attacks
 /// the master's target; when the master attacks the monster itself the charm breaks (its
-/// Enslave spells end; their ending texts are T-050's).
+/// Enslave spells end).
 pub fn do_charmed_monster_combat(world: &mut World, master: SessionId, mon: ActiveMonsterId) {
     match world.autocombat.entry(master).target {
         Some(AutoTarget::Player(t)) => {
             attack_monster_user(world, mon, t);
         }
         Some(AutoTarget::Monster(m)) if m == mon => {
-            let enslaving: Vec<bool> = match monster(world, mon) {
-                Some(mn) => mn
-                    .spells
-                    .iter()
-                    .map(|c| {
-                        c.spell != SpellNo(0)
-                            && world.spells.get(&c.spell).is_none_or(|s| {
-                                s.abilities
-                                    .iter()
-                                    .any(|(a, _)| *a == silvermere_types::enums::Ability::Enslave)
-                            })
-                    })
-                    .collect(),
-                None => return,
-            };
             if let Some(mn) = monster_mut(world, mon) {
                 mn.flags.remove(ActiveMonsterFlags::CHARMED);
-                for (slot, clear) in mn.spells.iter_mut().zip(enslaving) {
-                    if clear {
-                        slot.spell = SpellNo(0);
-                        slot.value = 0;
-                        slot.rounds = 0;
-                    }
-                }
             }
+            end_enslaving_spells(world, mon);
         }
         Some(AutoTarget::Monster(m)) => {
             attack_monster_monster(world, mon, m);
@@ -619,7 +601,8 @@ pub fn energy_update_character(world: &mut World, id: SessionId) {
     };
     p.status.remove(PlayerStatus::JUSTARRIVED);
     if p.energy < p.maxenergy || !p.status.contains(PlayerStatus::TARGETGONE) {
-        p.energy = p.energy.saturating_add(p.maxenergy);
+        // unsigned in the game: past 65535 it wraps
+        p.energy = p.energy.wrapping_add(p.maxenergy);
         if p.energy > p.maxenergy && !inside {
             p.energy = p.maxenergy;
         }
@@ -643,20 +626,24 @@ pub fn energy_update_monsters(world: &mut World) {
         if n == 0 || n == FREE_MONSTER as u32 {
             continue;
         }
-        let Some(m) = world
-            .active_monsters
-            .peek_mut(silvermere_types::ids::ActiveMonsterId(n as i32))
-        else {
+        let id = ActiveMonsterId(n as i32);
+        let Some(m) = world.active_monsters.peek_mut(id) else {
             continue;
         };
         let max = i32::from(m.maxenergy);
-        let energy = i32::from(m.energy);
+        // the game reads the unsigned energy into a 16-bit int: compared signed
+        let energy = i32::from(m.energy as i16);
+        // any change marks it dirty, though it may be back to what was saved
+        let changed = energy != max || m.target != -1;
         if energy < max {
-            m.energy = (energy + max).clamp(0, i32::from(u16::MAX)) as u16;
+            m.energy = m.energy.wrapping_add(m.maxenergy as u16);
         } else if energy > max {
-            m.energy = max.max(0) as u16;
+            m.energy = m.maxenergy as u16;
         }
         m.target = -1;
+        if changed {
+            world.active_monsters.mark_dirty(id);
+        }
     }
 }
 

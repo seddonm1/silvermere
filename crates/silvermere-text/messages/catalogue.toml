@@ -220,6 +220,16 @@ text = "{@COL_EXITS}Obvious exits: NONE!!!\r"
 wrap = true
 pattern = "room_exits"
 
+[messages.exits_list]
+text = "{@COL_EXITS}Obvious exits: {exits}\r"
+pattern = "room_exits"
+example = { exits = "closed door north, up" }
+note = "The EXITS command: the room display's exit line, not wrapped (display_visible_exits leaves word wrap as it is, off)."
+
+[messages.exits_list_none]
+text = "{@COL_EXITS}Obvious exits: NONE!!!\r"
+pattern = "room_exits"
+
 [messages.room_items]
 text = "{@ANSI_CYAN}You notice {items} here.\r"
 wrap = true
@@ -916,22 +926,22 @@ example = { rank = "  1", name = "Bob Smith            ", class = "Warrior   ", 
 note = "As topten_row_exp without the experience and the mark."
 
 [messages.gangs_header]
-text = "{@ANSI_CLRLINE}{@ANSI_BROWN}Top Gangs of the Realm\r{@ANSI_FGGREY}-=-==-=-=-=-=-=-=-=-=-\r\r{@ANSI_FGRED}Rank {@ANSI_FGGREEN}Gangname            {@ANSI_FGMAGENTA}Leader      {@ANSI_FGBROWN}Members {@ANSI_FGGREEN}Created\r{@ANSI_DKGREY}=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-\r{@ANSI_RESET}"
+text = "{@ANSI_CLRLINE}{@ANSI_BROWN}Top Gangs of the Realm\r{@ANSI_FGGREY}-=-==-=-=-=-=-=-=-=-=-\r\r{@ANSI_FGRED}Rank {@ANSI_FGGREEN}Gangname            {@ANSI_FGMAGENTA}Leader      {@ANSI_FGBROWN}Members {@ANSI_FGGREEN}Created\r{@ANSI_DKGREY}=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-\r{@ANSI_RESET}"
 pattern = "topten_header"
 note = "The top gangs heading without the experience column."
 
 [messages.gangs_header_exp]
-text = "{@ANSI_CLRLINE}{@ANSI_BROWN}Top Gangs of the Realm\r{@ANSI_FGGREY}-=-==-=-=-=-=-=-=-=-=-\r\r{@ANSI_FGRED}Rank {@ANSI_FGGREEN}Gangname            {@ANSI_FGMAGENTA}Leader      {@ANSI_FGBROWN}Members {@ANSI_FGGREEN}Created      {@ANSI_FGBROWN}Exp\r{@ANSI_DKGREY}=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-\r{@ANSI_RESET}"
+text = "{@ANSI_CLRLINE}{@ANSI_BROWN}Top Gangs of the Realm\r{@ANSI_FGGREY}-=-==-=-=-=-=-=-=-=-=-\r\r{@ANSI_FGRED}Rank {@ANSI_FGGREEN}Gangname            {@ANSI_FGMAGENTA}Leader      {@ANSI_FGBROWN}Members {@ANSI_FGGREEN}Created      {@ANSI_FGBROWN}Exp\r{@ANSI_DKGREY}=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-\r{@ANSI_RESET}"
 note = "With the experience column: a sysop in debug mode, or EXPTOPGANG."
 
 [messages.gang_row]
 text = "{@ANSI_FGRED}{rank}. {@ANSI_FGGREEN}{name} {@ANSI_FGMAGENTA}{leader} {@ANSI_FGBROWN}{members}    {@ANSI_FGGREEN}{created}\r"
-example = { rank = "  1", name = "Old Guard          ", leader = "Nester     ", members = "   3", created = "10/14/26" }
-note = "rank `%3.3s`, name `%-19.19s`, leader `%-11.11s`, members `%4.4s`, created ncedat (MM/DD/YY)."
+example = { rank = "  1", name = "Old Guard          ", leader = "Nester     ", members = "   3", created = "14-OCT-26" }
+note = "rank `%3.3s`, name `%-19.19s`, leader `%-11.11s`, members `%4.4s`, created ncedat (DD-MON-YY)."
 
 [messages.gang_row_exp]
 text = "{@ANSI_FGRED}{rank}. {@ANSI_FGGREEN}{name} {@ANSI_FGMAGENTA}{leader} {@ANSI_FGBROWN}{members}    {@ANSI_FGGREEN}{created}    {@ANSI_FGBROWN}{exp}\r"
-example = { rank = "  1", name = "Old Guard          ", leader = "Nester     ", members = "   3", created = "10/14/26", exp = "1000" }
+example = { rank = "  1", name = "Old Guard          ", leader = "Nester     ", members = "   3", created = "14-OCT-26", exp = "1000" }
 note = "As gang_row with the experience `%lu`, followed for a gang past the cap (GF_OVERFLOW) by `\\r%58.58s(%d times)` (more than one wrap) and `\\r%58.58s+%lu`."
 
 [messages.gangs_none]
@@ -1065,6 +1075,11 @@ note = "To the room looked into, from the reverse direction."
 text = "{@ANSI_LTREDBLK}You do not see {what} here!\r"
 example = { what = "bob" }
 note = "what: the rest of the line after LOOK."
+
+[messages.look_coin_desc]
+text = "{text}\r"
+example = { text = "The gold crowns are rustic and used." }
+note = "LOOK at a kind of coin: its description, the fifth currency's with its name."
 
 [messages.look_up_down]
 text = "{@ANSI_CLRLINE}{@ANSI_CYAN}{who} looks {target} up and down.\r"
@@ -1311,6 +1326,10 @@ pattern = "toll_short"
 args = { n = "i64" }
 example = { n = "5", cur = "gold crowns" }
 note = "The amount is the low word of the exit's first parameter (sic)."
+
+[messages.addon_not_activated]
+text = "{@ANSI_CLRLINE}{@ANSI_GREY}Your sysop must purchase the {@ANSI_WHITE}{addon}{@ANSI_GREY} before you may move through this exit.\r"
+example = { addon = "Dragon's Teeth add-on" }
 
 [messages.not_permitted]
 text = "You are not permitted in that room!\r"
@@ -3677,7 +3696,7 @@ text = "Error\r"
 text = "No item error\r"
 
 [messages.sysop_scan_header]
-text = "{@ANSI_CLRLINE}{@ANSI_FGMAGENTA}Userid           {@ANSI_FGGREEN}Name                 {@ANSI_FGCYAN}Bcst{@ANSI_FGBROWN}  Room/Map {@ANSI_FGGREY}Evil      {@ANSI_FGMAGENTA}      \r{@ANSI_DKGREY}=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=--=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=\r{@ANSI_RESET}"
+text = "{@ANSI_CLRLINE}{@ANSI_FGMAGENTA}Userid           {@ANSI_FGGREEN}Name                 {@ANSI_FGCYAN}Bcst{@ANSI_FGBROWN}  Room/Map {@ANSI_FGGREY}Evil      {@ANSI_FGMAGENTA}      \r{@ANSI_DKGREY}=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=\r{@ANSI_RESET}"
 note = "display_scan_of_users, the sysop's heading."
 
 [messages.sysop_scan_row]
@@ -4432,7 +4451,7 @@ note = "`what` is `invoked a power` for a Kai class, else `cast a spell`. The Ge
 text = "{@ANSI_CLRLINE}{@ANSI_LTREDBLK}You have already {what} this round!\r"
 pattern = "already_this_round"
 example = { what = "cast a spell" }
-note = "Short of energy outside auto-combat. The game sends the line and then an empty send."
+note = "Short of energy outside auto-combat at the end of a cast. (sic) The game sends the line twice: its tell_user moves the buffer pointer back without emptying the buffer, so the next send repeats it."
 
 [messages.cast_short_mana]
 text = "{@ANSI_CLRLINE}{@ANSI_LTREDBLK}You do not have enough {what}.\r"
