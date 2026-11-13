@@ -17,7 +17,9 @@ use crate::commands::combat::{Found, find_action_target};
 use crate::commands::dispatch::Handled;
 use crate::commands::pending::add_delay;
 use crate::commands::{Cmd, CommandLine};
-use crate::items::inventory::{add_item_to_inventory, remove_item_from_inventory, show_options};
+use crate::items::inventory::{
+    add_item_to_inventory, add_item_to_inventory_telling, remove_item_from_inventory, show_options,
+};
 use crate::tell::tell_user;
 use crate::world::World;
 
@@ -278,7 +280,8 @@ pub fn rob_user(world: &mut World, id: SessionId, target: SessionId, what: Optio
                 );
                 return;
             }
-            add_item_to_inventory(world, target, n, charges);
+            // (sic) the victim's refusal, if he cannot take it back, goes to the robber
+            add_item_to_inventory_telling(world, target, n, charges, id);
         }
     }
     fail(world);
